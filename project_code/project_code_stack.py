@@ -10,6 +10,7 @@ from aws_cdk import (
     Duration,
 )
 from constructs import Construct
+from pathlib import Path
 
 class ProjectCodeStack(Stack):
 
@@ -29,14 +30,32 @@ class ProjectCodeStack(Stack):
             self, "GltfParserLambda",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="gltf_parser.handler",
-            code=_lambda.Code.from_asset("lambda"),  # We will create this lambda directory
+            code=_lambda.Code.from_asset(
+                str(Path(__file__).parent.joinpath("lambda"))
+            ),
             timeout=Duration.minutes(5),
             memory_size=512,
-            log_retention=logs.RetentionDays.ONE_WEEK
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "BUCKET_NAME": self.gltf_bucket.bucket_name,
+            }
         )
 
         # Give Lambda permissions to read/write to S3 bucket
         self.gltf_bucket.grant_read_write(self.gltf_parser_lambda)
+
+        # Grant IoT SiteWise permissions
+        self.gltf_parser_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=[
+                "iotsitewise:CreateAssetModel",
+                "iotsitewise:CreateAsset",
+                "iotsitewise:UpdateAsset",
+                "iotsitewise:DescribeAsset",
+                "iotsitewise:ListAssets",
+                "iotsitewise:ListAssetModels",
+            ],
+            resources=["*"],
+        ))
 
         # Trigger Lambda function once object is created in S3
         self.gltf_bucket.add_event_notification(

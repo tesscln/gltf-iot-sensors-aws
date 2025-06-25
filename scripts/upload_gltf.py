@@ -1,61 +1,74 @@
 #!/usr/bin/env python3
 import argparse
-import boto3
 import os
 import sys
+import boto3
 
-def upload_file(s3, local_path: str, bucket: str, key_prefix: str):
-    filename = os.path.basename(local_path)
-    key = f"{key_prefix}/{filename}"
-    print(f"Uploading {local_path} → s3://{bucket}/{key}")
-    s3.upload_file(local_path, bucket, key)
-    print("✔ done")
+def upload_file(s3_client, path, bucket, prefix=""):
+    key = os.path.join(prefix, os.path.basename(path))
+    print(f"Uploading {path} to s3://{bucket}/{key}")
+    s3_client.upload_file(path, bucket, key)
+    print(f"Uploaded {key}")
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Upload a glTF asset (either .glb or .gltf+.bin) to S3"
+        description="Upload glTF assets (.glb or .gltf + .bin) to an S3 bucket"
     )
-    parser.add_argument(
-        "--bucket-output-name", "-b",
-        help="The CloudFormation Output name for the bucket (e.g. GltfBucketName)",
-        required=True
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--bucket-output-name", "-o",
+        help="CloudFormation output key for the bucket"
+    )
+    group.add_argument(
+        "--bucket", "--bucket-name", "-b",
+        dest="bucket_name",
+        help="Direct S3 bucket name to use"
     )
     args = parser.parse_args()
 
-    # discover your bucket name from CFN output
-    cf = boto3.client("cloudformation")
-    stacks = cf.describe_stacks(StackName="ProjectCodeStack")["Stacks"]
-    outputs = stacks[0]["Outputs"]
-    bucket = next(o["OutputValue"] for o in outputs
-                  if o["OutputKey"] == args.bucket_output_name)
+    if args.bucket_name:
+        bucket = args.bucket_name
+    else:
+        cf = boto3.client("cloudformation")
+        stacks = cf.describe_stacks(StackName="ProjectCodeStack")["Stacks"]
+        outputs = stacks[0].get("Outputs", [])
+        try:
+            bucket = next(
+                o["OutputValue"]
+                for o in outputs
+                if o["OutputKey"] == args.bucket_output_name
+            )
+        except StopIteration:
+            print(f"No CloudFormation output named '{args.bucket_output_name}' found.")
+            sys.exit(1)
 
     s3 = boto3.client("s3")
 
-    choice = input("Do you want to upload a single .glb or a .gltf+.bin pair? [glb/gltf]: ").strip().lower()
-    if choice == "glb":
-        glb_path = input("Path to your .glb file: ").strip()
+    mode = input("Upload mode? Enter 'glb' for .glb or 'gltf' for .gltf + .bin: ").strip().lower()
+    if mode == "glb":
+        glb_path = input("Path to .glb file: ").strip()
         if not os.path.isfile(glb_path) or not glb_path.lower().endswith(".glb"):
-            print("❌ Please provide a valid .glb file path.")
+            print("Invalid .glb file path.")
             sys.exit(1)
-        upload_file(s3, glb_path, bucket, "")
+        upload_file(s3, glb_path, bucket)
 
-    elif choice == "gltf":
-        gltf_path = input("Path to your .gltf file: ").strip()
-        bin_path  = input("Path to the accompanying .bin file: ").strip()
-        for p, ext in [(gltf_path, ".gltf"), (bin_path, ".bin")]:
-            if not os.path.isfile(p) or not p.lower().endswith(ext):
-                print(f"❌ {p} is not a valid {ext} file.")
-                sys.exit(1)
-        # upload both side by side so Lambda sees them together
-        upload_file(s3, gltf_path, bucket, "")
-        upload_file(s3, bin_path,  bucket, "")
+    elif mode == "gltf":
+        gltf_path = input("Path to .gltf file: ").strip()
+        bin_path  = input("Path to .bin file: ").strip()
+        if not os.path.isfile(gltf_path) or not gltf_path.lower().endswith(".gltf"):
+            print("Invalid .gltf file path.")
+            sys.exit(1)
+        if not os.path.isfile(bin_path) or not bin_path.lower().endswith(".bin"):
+            print("Invalid .bin file path.")
+            sys.exit(1)
+        upload_file(s3, gltf_path, bucket)
+        upload_file(s3, bin_path, bucket)
 
     else:
-        print("❌ Invalid choice. Please run again and enter 'glb' or 'gltf'.")
+        print("Mode must be 'glb' or 'gltf'.")
         sys.exit(1)
 
-    print("All done! Your files are in S3 and will trigger the parser Lambda.")
+    print("Upload complete. Lambda function will process the new assets.")
 
 if __name__ == "__main__":
     main()
-
