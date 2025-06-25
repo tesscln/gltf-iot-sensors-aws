@@ -12,29 +12,50 @@ BUCKET = os.environ["BUCKET_NAME"]
 
 def handler(event, context):
     """
-    Triggered by S3 ObjectCreated on the glTF bucket.
-    Downloads the glTF file, parses its JSON structure,
+    Triggered by S3 notification of objectCreated in the S3 glTF bucket.
+    It downloads the glTF file, parses its JSON structure,
     then creates an IoT SiteWise asset model + assets
-    mirroring the glTF node hierarchy.
+    corresponding to the glTF node hierarchy.
     """
-    # 1) extract S3 info from the event
+    # Extract S3 info from the event
     record = event["Records"][0]["s3"]
     bucket = record["bucket"]["name"]
     key    = record["object"]["key"]
 
-    # 2) download into a temp file
+    # Only process .gltf and .glb files (ignore .bin files)
+    if not key.lower().endswith(('.gltf', '.glb')):
+        print(f"Ignoring non-glTF file: {key}")
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"message": f"Ignored non-glTF file: {key}"})
+        }
+
+    # Download the main glTF file into a temp file
     local_path = os.path.join(tempfile.gettempdir(), os.path.basename(key))
     s3.download_file(bucket, key, local_path)
+    print(f"Downloaded {key} to {local_path}")
 
-    # 3) load the JSON
+    # If this is a .gltf file, also download the corresponding .bin file
+    if key.lower().endswith('.gltf'):
+        bin_key = key.replace('.gltf', '.bin')
+        bin_local_path = os.path.join(tempfile.gettempdir(), os.path.basename(bin_key))
+        
+        try:
+            s3.download_file(bucket, bin_key, bin_local_path)
+            print(f"Downloaded {bin_key} to {bin_local_path}")
+        except Exception as e:
+            print(f"Warning: Could not download {bin_key}: {e}")
+            # Continue without .bin file - some .gltf files don't have external binaries
+
+    # Load the JSON
     with open(local_path, "r") as f:
         gltf = json.load(f)
 
-    # 4) derive a base model name from the filename
+    # Derive an asset model name from the filename
     base = os.path.splitext(os.path.basename(key))[0]
     model_name = f"{base}_AssetModel"
 
-    # 5) create an Asset Model in SiteWise
+    # Create an Asset Model in SiteWise
     #    (you could first check if one already exists)
     model_response = sitewise.create_asset_model(
         assetModelName=model_name,
@@ -47,8 +68,12 @@ def handler(event, context):
     )
     asset_model_id = model_response["assetModelId"]
 
-    # 6) walk the glTF nodes and create SiteWise Assets
+    # Walk the glTF nodes and create SiteWise Assets
     node_list = gltf.get("nodes", [])
+    print(f"Found {len(node_list)} nodes in glTF file:")
+    for idx, node in enumerate(node_list):
+        print(f"  Node {idx}: {node}")
+    
     for idx, node in enumerate(node_list):
         node_name = node.get("name", f"Node{idx}")
         # create one asset per node

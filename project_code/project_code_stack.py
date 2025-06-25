@@ -17,7 +17,7 @@ class ProjectCodeStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # 1) S3 bucket for uploads
+        # Create an S3 bucket for uploads
         gltf_bucket = s3.Bucket(
             self, "GltfUploadBucket",
             versioned=True,
@@ -25,7 +25,7 @@ class ProjectCodeStack(Stack):
             auto_delete_objects=True,
         )
 
-        # 2) Single Lambda to parse glTF and call SiteWise
+        # Create a Lambda to parse the glTF file and call IoT SiteWise
         parser = _lambda.Function(
             self, "GltfParserLambda",
             runtime=_lambda.Runtime.PYTHON_3_11,
@@ -39,7 +39,7 @@ class ProjectCodeStack(Stack):
             },
         )
 
-        # 3) Grant S3 and SiteWise permissions
+        # Grant S3 and SiteWise permissions
         gltf_bucket.grant_read(parser)
         parser.add_to_role_policy(iam.PolicyStatement(
             actions=[
@@ -51,13 +51,13 @@ class ProjectCodeStack(Stack):
             resources=["*"],
         ))
 
-        # 4) Subscribe Lambda to new-objects in the bucket
+        # Subscribe Lambda to new-objects in the bucket
         gltf_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
             s3n.LambdaDestination(parser),
         )
 
-        # 5) Output the bucket name once
+        # Output the bucket name once
         CfnOutput(self, "GltfBucketName",
             value=gltf_bucket.bucket_name,
             description="S3 bucket for uploading glTF files",
