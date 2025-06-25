@@ -3,6 +3,7 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_lambda as _lambda,
     aws_s3_notifications as s3n,
+    CfnOutput,
     aws_iam as iam,
     aws_logs as logs,
     RemovalPolicy,
@@ -44,8 +45,7 @@ class ProjectCodeStack(Stack):
         )
 
         # Output bucket name (to copy easily into upload script) in the Cfn terminal
-        self.output_bucket_name = self.gltf_bucket.bucket_name
-
-        self.output = self.node.try_get_context("cdk_output")
-        
-        self.add_cfn_output("GltfBucketName", value=self.gltf_bucket.bucket_name)
+        CfnOutput(self, "GltfBucketName",
+                  value=self.gltf_bucket.bucket_name,
+                  description="The name of the S3 bucket for uploading glTF files"
+                  )
