@@ -34,7 +34,7 @@ def get_or_create_asset_model(sitewise, name, description):
     resp = sitewise.create_asset_model(
         assetModelName=name,
         assetModelDescription=description,
-        propertyDefinitions=[{
+        assetModelProperties=[{
             "name": "placeholder",
             "dataType": "STRING",
             "type": { "attribute": {} }
