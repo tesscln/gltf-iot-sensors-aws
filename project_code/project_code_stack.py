@@ -46,7 +46,13 @@ class ProjectCodeStack(Stack):
                 "iotsitewise:CreateAssetModel",
                 "iotsitewise:CreateAsset",
                 "iotsitewise:UpdateAsset",
-                # add more if needed…
+                "iotsitewise:DescribeAssetModel",
+                "iotsitewise:ListAssetModels",
+                "iotsitewise:ListAssets",
+                "iotsitewise:ListAssetProperties",
+                "iotsitewise:ListAssetPropertyValues",
+                "iotsitewise:ListAssetPropertyValueHistory",
+                "iotsitewise:ListAssetPropertyAggregates"
             ],
             resources=["*"],
         ))

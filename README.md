@@ -1,20 +1,11 @@
-# glTF to Digital Twin Pipeline
+# AWS CLoud Development Kit ingesting glTF assets and linking them to IoT sensors.
 
-**Automated Digital Twin Creation from glTF 3D Models**
+## Automated pipeline using AWS IoT Core, IoT SiteWise, TwinMaker and Grafana to get a Digital Twin updated in real-time with IoT streams data.
 
-This project automatically converts glTF 3D models into fully functional digital twins with real-time IoT sensor integration. Upload a glTF file and watch as it transforms into a live digital twin with automated asset hierarchy creation in AWS IoT SiteWise and visualization in Grafana.
 
-## What This Does
+This project automatically converts glTF 3D models into fully functional digital twins with real-time IoT sensor integration. Upload your own glTF file and gets its live digital twin with automated asset hierarchy creation in AWS IoT SiteWise and visualization in Grafana.
 
-Transform any glTF 3D model into a digital twin in 5 simple steps:
-
-1. **Deploy Infrastructure** - One-command AWS CDK deployment
-2. **Upload glTF File** - Simple script uploads your 3D model
-3. **Automatic Processing** - Lambda parses structure and creates IoT assets
-4. **Digital Twin Creation** - TwinMaker binds 3D model to IoT data
-5. **Live Visualization** - Real-time sensor data in Grafana
-
-## 🏗️ Architecture
+## Project Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -35,7 +26,9 @@ Transform any glTF 3D model into a digital twin in 5 simple steps:
                        └─────────────────┘
 ```
 
-## Quick Start
+![Architecture Diagram](images/project_architecture.png)
+
+## Deployment on your AWS account
 
 ### Prerequisites
 
@@ -47,18 +40,18 @@ Transform any glTF 3D model into a digital twin in 5 simple steps:
 ### Step 1: Clone and Setup
 
 ```bash
-git clone <your-repo-url>
-cd project_code
+git clone https://github.com/tesscln/gltf-iot-sensors-aws.git
+cd gltf-iot-sensors-aws
 
-# Create virtual environment
+# Create a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate.bat
 
-# Install dependencies
+# Install the required dependencies
 pip install -r requirements.txt
 ```
 
-### Step 2: Deploy Infrastructure
+### Step 2: Deploy the Infrastructure
 
 ```bash
 # Deploy the CDK stack
@@ -73,24 +66,21 @@ This creates:
 - ✅ SiteWise setup
 - ✅ All necessary IAM roles and permissions
 
-**Important**: After deployment, CDK will output the S3 bucket name in the terminal. Copy this for the next step.
 
 ### Step 3: Upload Your glTF File
 
 ```bash
 # Upload your 3D model
-python upload_gltf.py --bucket <your-bucket-name> --file /path/to/your/model.glb
+python3 scripts/upload_gltf.py --bucket-output-name GltfBucketName
 ```
 
-Or use the interactive version:
-```bash
-python upload_gltf.py
-# The script will prompt you for bucket name and file path
-```
+It will ask you whether your glTF file is in the .gltf or in the .glb format. If in .gltf, you will need to enter the local path to the file for the .gltf and then for the .bin file. 
 
-### Step 4: Watch the Magic Happen
+If the upload worked correctly, the terminal will print "Upload complete. Lambda function will process the new assets".
 
-1. **Automatic Trigger**: Lambda function is automatically triggered by the S3 upload
+### Step 4: Lambda function gets triggered and starts building the pipeline.
+
+1. **Automatic Trigger**: Lambda function is automatically triggered by the S3 glTF upload
 2. **Structure Parsing**: Lambda extracts scene, nodes, mesh names, and sensor locations from your glTF
 3. **Asset Creation**: IoT SiteWise assets and hierarchies are created automatically
 4. **Topic Mapping**: Each asset property is mapped to its corresponding MQTT topic
@@ -106,14 +96,15 @@ python upload_gltf.py
 ## Project Structure
 
 ```
-project_code/
+gltf-iot-sensors-aws/
 ├── app.py                          # CDK app entry point
 ├── project_code_stack.py           # Main CDK stack definition
 ├── requirements.txt                # Python dependencies
 ├── requirements-dev.txt            # Development dependencies
 ├── upload_gltf.py                 # glTF upload script
-├── lambda/                        # Lambda function code
-│   └── gltf_parser.py             # Main Lambda handler
+├── project_code                        # Lambda function code
+│   └── project_code_stack.py           # Main Lambda handler
+        └──
 └── tests/                         # Unit tests
     └── unit/
         └── test_project_code_stack.py
