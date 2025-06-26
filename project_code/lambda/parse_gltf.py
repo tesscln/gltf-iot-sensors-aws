@@ -12,6 +12,40 @@ sitewise = boto3.client("iotsitewise")
 # environment variable
 BUCKET = os.environ["BUCKET_NAME"]
 
+def find_asset_model_by_name(sitewise, name):
+    """
+    Returns the first assetModelId whose assetModelName matches `name`,
+    or None if no such model exists.
+    """
+    paginator = sitewise.get_paginator("list_asset_models")
+    for page in paginator.paginate():
+        for model in page["assetModelSummaries"]:
+            if model["name"] == name:
+                return model["id"]
+    return None
+
+def get_or_create_asset_model(sitewise, name, description):
+    # 1) Try to find an existing one
+    model_id = find_asset_model_by_name(sitewise, name)
+    if model_id:
+        return model_id
+
+    # 2) Not found: create a new one
+    resp = sitewise.create_asset_model(
+        assetModelName=name,
+        assetModelDescription=description,
+        propertyDefinitions=[{
+            "name": "placeholder",
+            "dataType": "STRING",
+            "type": { "attribute": {} }
+        }]
+    )
+    model_id = resp["assetModelId"]
+
+    # 3) Wait until it becomes ACTIVE (see earlier snippet)
+    wait_for_model_active(sitewise, model_id)
+    return model_id
+
 def wait_for_model_active(sitewise, model_id, timeout=60):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -67,23 +101,13 @@ def handler(event, context):
         gltf = json.load(f)
 
     # Derive an asset model name from the filename
-    base = os.path.splitext(os.path.basename(key))[0]
+    base = os.path.splitext(os.path.basename(key))[0]  # e.g. “turbine”
     model_name = f"{base}_AssetModel"
-
-    # Create an Asset Model in SiteWise
-    #    (you could first check if one already exists)
-    model_response = sitewise.create_asset_model(
-        assetModelName=model_name,
-        assetModelDescription=f"Auto-generated from {key}",
-        assetModelProperties=[{
-            "name": "placeholder",
-            "dataType": "STRING",
-            "type": { "attribute": {} }
-        }]
-    )
-    
-    model_id = model_response["assetModelId"]
-    wait_for_model_active(sitewise, model_id)
+    model_id = get_or_create_asset_model(
+    sitewise,
+    name=model_name,
+    description=f"Auto-generated from {key}"
+)
     
     asset_model_id = model_id
 
