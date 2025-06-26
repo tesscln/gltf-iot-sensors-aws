@@ -60,7 +60,7 @@ def handler(event, context):
     model_response = sitewise.create_asset_model(
         assetModelName=model_name,
         assetModelDescription=f"Auto-generated from {key}",
-        propertyDefinitions=[{
+        assetModelProperties=[{
             "name": "placeholder",
             "dataType": "STRING",
             "type": { "attribute": {} }
