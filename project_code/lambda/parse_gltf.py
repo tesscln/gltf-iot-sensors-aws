@@ -2,6 +2,8 @@ import os
 import json
 import tempfile
 import boto3
+import time
+from botocore.exceptions import ClientError
 
 # boto3 clients
 s3       = boto3.client("s3")
@@ -9,6 +11,19 @@ sitewise = boto3.client("iotsitewise")
 
 # environment variable
 BUCKET = os.environ["BUCKET_NAME"]
+
+def wait_for_model_active(sitewise, model_id, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        resp = sitewise.describe_asset_model(assetModelId=model_id)
+        state = resp["assetModelStatus"]["state"]
+        if state == "ACTIVE":
+            return True
+        if state == "FAILED":
+            raise RuntimeError(f"AssetModel {model_id} failed to activate: {resp['assetModelStatus']}")
+        time.sleep(1)
+    raise TimeoutError(f"Timed out waiting for AssetModel {model_id} to become ACTIVE")
+
 
 def handler(event, context):
     """
@@ -66,7 +81,11 @@ def handler(event, context):
             "type": { "attribute": {} }
         }]
     )
-    asset_model_id = model_response["assetModelId"]
+    
+    model_id = model_response["assetModelId"]
+    wait_for_model_active(sitewise, model_id)
+    
+    asset_model_id = model_id
 
     # Walk the glTF nodes and create SiteWise Assets
     node_list = gltf.get("nodes", [])
