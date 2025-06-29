@@ -1,167 +1,106 @@
 import os
 import json
 import tempfile
-import boto3
 import time
+import boto3
 from botocore.exceptions import ClientError
 
-# boto3 clients
-s3        = boto3.client("s3")
-sitewise  = boto3.client("iotsitewise")
-iot       = boto3.client("iot")
+s3      = boto3.client("s3")
+sitewise = boto3.client("iotsitewise")
+iot     = boto3.client("iot")
 
-# environment variable
-BUCKET = os.environ["BUCKET_NAME"]
-LAMBDA_ARN = os.environ["AWS_LAMBDA_FUNCTION_ARN"]  # ensure you pass this env var in CDK
+BUCKET    = os.environ["BUCKET_NAME"]
+LAMBDA_ARN = os.environ["AWS_LAMBDA_FUNCTION_ARN"]
 
 def find_asset_model_by_name(sitewise, name):
-    """
-    Returns the first assetModelId whose assetModelName matches `name`,
-    or None if no such model exists.
-    """
     paginator = sitewise.get_paginator("list_asset_models")
     for page in paginator.paginate():
-        for model in page["assetModelSummaries"]:
-            if model["name"] == name:
-                return model["id"]
+        for m in page["assetModelSummaries"]:
+            if m["name"] == name:
+                return m["id"]
     return None
 
-def get_or_create_asset_model(sitewise, name, description):
-    # 1) Try to find an existing one
-    model_id = find_asset_model_by_name(sitewise, name)
-    if model_id:
-        return model_id
+def wait_for_model_active(sitewise, mid, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        status = sitewise.describe_asset_model(assetModelId=mid)["assetModelStatus"]["state"]
+        if status == "ACTIVE":
+            return
+        if status == "FAILED":
+            raise RuntimeError(f"Model {mid} failed: {status}")
+        time.sleep(1)
+    raise TimeoutError(f"Timeout waiting for model {mid}")
 
-    # 2) Not found: create a new one
+def get_or_create_asset_model(sitewise, name, desc):
+    mid = find_asset_model_by_name(sitewise, name)
+    if mid:
+        return mid
     resp = sitewise.create_asset_model(
         assetModelName=name,
-        assetModelDescription=description,
+        assetModelDescription=desc,
         assetModelProperties=[{
             "name": "placeholder",
             "dataType": "STRING",
-            "type": { "attribute": {} }
+            "type": {"attribute": {}}
         }]
     )
-    model_id = resp["assetModelId"]
-
-    # 3) Wait until it becomes ACTIVE (see earlier snippet)
-    wait_for_model_active(sitewise, model_id)
-    return model_id
-
-def wait_for_model_active(sitewise, model_id, timeout=60):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        resp = sitewise.describe_asset_model(assetModelId=model_id)
-        state = resp["assetModelStatus"]["state"]
-        if state == "ACTIVE":
-            return True
-        if state == "FAILED":
-            raise RuntimeError(f"AssetModel {model_id} failed to activate: {resp['assetModelStatus']}")
-        time.sleep(1)
-    raise TimeoutError(f"Timed out waiting for AssetModel {model_id} to become ACTIVE")
-
+    mid = resp["assetModelId"]
+    wait_for_model_active(sitewise, mid)
+    return mid
 
 def handler(event, context):
-    """
-    Triggered by S3 notification of objectCreated in the S3 glTF bucket.
-    It downloads the glTF file, parses its JSON structure,
-    then creates an IoT SiteWise asset model + assets
-    corresponding to the glTF node hierarchy.
-    """
-    # Extract S3 info from the event
     record = event["Records"][0]["s3"]
     bucket = record["bucket"]["name"]
     key    = record["object"]["key"]
 
-    # Only process .gltf and .glb files (ignore .bin files)
-    if not key.lower().endswith(('.gltf', '.glb')):
-        print(f"Ignoring non-glTF file: {key}")
-        return {
-            "statusCode": 200,
-            "body": json.dumps({"message": f"Ignored non-glTF file: {key}"})
-        }
+    # Only process .gltf/.glb
+    if not key.lower().endswith((".gltf", ".glb")):
+        return {"statusCode":200, "body":json.dumps({"skipped": key})}
 
-    # Download the main glTF file into a temp file
-    local_path = os.path.join(tempfile.gettempdir(), os.path.basename(key))
-    s3.download_file(bucket, key, local_path)
-    print(f"Downloaded {key} to {local_path}")
+    # Download main file
+    local = os.path.join(tempfile.gettempdir(), os.path.basename(key))
+    s3.download_file(bucket, key, local)
 
-    # If this is a .gltf file, also download the corresponding .bin file
-    if key.lower().endswith('.gltf'):
-        bin_key = key.replace('.gltf', '.bin')
-        bin_local_path = os.path.join(tempfile.gettempdir(), os.path.basename(bin_key))
-        
+    # Optionally download .bin
+    if key.lower().endswith(".gltf"):
+        bin_key = key[:-5] + ".bin"
         try:
-            s3.download_file(bucket, bin_key, bin_local_path)
-            print(f"Downloaded {bin_key} to {bin_local_path}")
-        except Exception as e:
-            print(f"Warning: Could not download {bin_key}: {e}")
-            # Continue without .bin file - some .gltf files don't have external binaries
+            s3.download_file(bucket, bin_key, local.replace(".gltf", ".bin"))
+        except ClientError:
+            pass
 
-    # Load the JSON
-    with open(local_path, "r") as f:
+    with open(local, "r") as f:
         gltf = json.load(f)
 
-    # Derive an asset model name from the filename
-    base = os.path.splitext(os.path.basename(key))[0]  # e.g. “turbine”
+    base       = os.path.splitext(os.path.basename(key))[0]
     model_name = f"{base}_AssetModel"
-    model_id = get_or_create_asset_model(
-        sitewise,
-        name=model_name,
-        description=f"Auto-generated from {key}"
-        )
-    
-    asset_model_id = model_id
+    mid        = get_or_create_asset_model(sitewise, model_name, f"From {key}")
 
-    # Walk the glTF nodes and create SiteWise Assets
-    node_list = gltf.get("nodes", [])
-    print(f"Found {len(node_list)} nodes in glTF file:")
-    for idx, node in enumerate(node_list):
-        print(f"  Node {idx}: {node}")
-    
-    for idx, node in enumerate(node_list):
+    # Create one SiteWise Asset per glTF node
+    for idx, node in enumerate(gltf.get("nodes", [])):
         node_name = node.get("name", f"Node{idx}")
-        # create one asset per node
-        asset_response = sitewise.create_asset(
-            assetName=f"{base}_{node_name}",
-            assetModelId=asset_model_id,
-        )
-        asset_id = asset_response["assetId"]
-    
-    # Create or update an IoT Core Topic Rule
-    rule_name = f"{base}_TopicRule"
-    topic_pattern = f"{base}/#"
+        sitewise.create_asset(assetName=f"{base}_{node_name}", assetModelId=mid)
 
-    sql = f"SELECT topic(), * FROM '{topic_pattern}'"
-    rule_payload = {
-        "sql":            sql,
-        "ruleDisabled":   False,
-        "awsIotSqlVersion": "2016-03-23",
-        "actions": [
-            {
-                "lambda": {
-                    "functionArn": LAMBDA_ARN
-                }
-            }
-        ]
+    # Build or update an IoT rule so every topic under "<base>/#" invokes this Lambda
+    rule_name     = f"{base}_TopicRule"
+    topic_pattern = f"{base}/#"
+    sql           = f"SELECT topic(), * FROM '{topic_pattern}'"
+    payload       = {
+        "sql":             sql,
+        "ruleDisabled":    False,
+        "awsIotSqlVersion":"2016-03-23",
+        "actions": [{
+            "lambda": {"functionArn": LAMBDA_ARN}
+        }]
     }
 
+    # Delete old rule if exists
     try:
         iot.delete_topic_rule(ruleName=rule_name)
     except ClientError as e:
         if e.response["Error"]["Code"] != "ResourceNotFoundException":
             raise
 
-    iot.create_topic_rule(
-        ruleName=rule_name,
-        topicRulePayload=rule_payload
-    )
+    iot.create_topic_rule(ruleName=rule_name, topicRulePayload=payload)
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "message":       "glTF parsed, SiteWise assets created, IoT rule deployed",
-            "assetModelId":  model_id,
-            "topicRule":     rule_name
-        })
-    }
+    return {"statusCode":200, "body":json.dumps({"model": mid, "rule": rule_name})}
