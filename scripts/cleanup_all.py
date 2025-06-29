@@ -50,12 +50,14 @@ def delete_assets_for_model(model_id):
         time.sleep(2)
 
 def delete_model(model_id, model_name):
+    """Delete the asset model once no assets remain."""
     print(f"Deleting AssetModel {model_name} ({model_id})")
     sitewise.delete_asset_model(assetModelId=model_id)
     # wait until the model disappears from list
     while True:
-        ids = [m["id"] for m,_ in list_models_with_suffix()]
-        if model_id not in ids:
+        # list_models_with_suffix returns list of (id, prefix) tuples
+        remaining_ids = [mid for mid,_ in list_models_with_suffix()]
+        if model_id not in remaining_ids:
             return
         print("   waiting for model to disappear…")
         time.sleep(2)
