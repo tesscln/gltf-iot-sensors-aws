@@ -6,11 +6,13 @@ import time
 from botocore.exceptions import ClientError
 
 # boto3 clients
-s3       = boto3.client("s3")
-sitewise = boto3.client("iotsitewise")
+s3        = boto3.client("s3")
+sitewise  = boto3.client("iotsitewise")
+iot       = boto3.client("iot")
 
 # environment variable
 BUCKET = os.environ["BUCKET_NAME"]
+LAMBDA_ARN = os.environ["AWS_LAMBDA_FUNCTION_ARN"]  # ensure you pass this env var in CDK
 
 def find_asset_model_by_name(sitewise, name):
     """
@@ -104,10 +106,10 @@ def handler(event, context):
     base = os.path.splitext(os.path.basename(key))[0]  # e.g. “turbine”
     model_name = f"{base}_AssetModel"
     model_id = get_or_create_asset_model(
-    sitewise,
-    name=model_name,
-    description=f"Auto-generated from {key}"
-)
+        sitewise,
+        name=model_name,
+        description=f"Auto-generated from {key}"
+        )
     
     asset_model_id = model_id
 
@@ -125,13 +127,41 @@ def handler(event, context):
             assetModelId=asset_model_id,
         )
         asset_id = asset_response["assetId"]
+    
+    # Create or update an IoT Core Topic Rule
+    rule_name = f"{base}_TopicRule"
+    topic_pattern = f"{base}/#"
 
-        # (optional) now you could map properties to IoT topics here
+    sql = f"SELECT topic(), * FROM '{topic_pattern}'"
+    rule_payload = {
+        "sql":            sql,
+        "ruleDisabled":   False,
+        "awsIotSqlVersion": "2016-03-23",
+        "actions": [
+            {
+                "lambda": {
+                    "functionArn": LAMBDA_ARN
+                }
+            }
+        ]
+    }
+
+    try:
+        iot.delete_topic_rule(ruleName=rule_name)
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ResourceNotFoundException":
+            raise
+
+    iot.create_topic_rule(
+        ruleName=rule_name,
+        topicRulePayload=rule_payload
+    )
 
     return {
         "statusCode": 200,
         "body": json.dumps({
-            "message": "glTF parsed and SiteWise assets created",
-            "assetModelId": asset_model_id
+            "message":       "glTF parsed, SiteWise assets created, IoT rule deployed",
+            "assetModelId":  model_id,
+            "topicRule":     rule_name
         })
     }

@@ -7,6 +7,7 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_iam as iam,
     aws_logs as logs,
+    aws_iot as iot,
     CfnOutput,
     RemovalPolicy,
     Duration,
@@ -52,10 +53,20 @@ class ProjectCodeStack(Stack):
                 "iotsitewise:ListAssetProperties",
                 "iotsitewise:ListAssetPropertyValues",
                 "iotsitewise:ListAssetPropertyValueHistory",
-                "iotsitewise:ListAssetPropertyAggregates"
+                "iotsitewise:ListAssetPropertyAggregates",
+                "iot:CreateTopicRule",
+                "iot:DeleteTopicRule",
+                "lambda:AddPermission" 
             ],
             resources=["*"],
         ))
+
+        # Grant the Lambda function permission to be invoked by IoT
+        parser.add_permission("AllowIoTInvoke",
+            principal=iam.ServicePrincipal("iot.amazonaws.com"),
+            action="lambda:InvokeFunction",
+            source_arn=f"arn:aws:iot:{self.region}:{self.account}:rule/*"
+        )
 
         # Subscribe Lambda to new-objects in the bucket
         gltf_bucket.add_event_notification(
