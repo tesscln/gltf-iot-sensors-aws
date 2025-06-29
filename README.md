@@ -88,6 +88,16 @@ If the upload is successful, you'll see: **"Upload complete. Lambda function wil
 3. See real-time sensor data streaming
 4. Query historical data from Timestream or S3
 
+### Cleanup
+
+To remove all created resources (assets, asset models, and uploaded glTF files), run:
+
+```bash
+python3 cleanup_all.py
+```
+
+This will delete all IoT SiteWise assets, asset models, and glTF files from S3, allowing you to start fresh.
+
 ## Project Repository Structure
 
 ```
