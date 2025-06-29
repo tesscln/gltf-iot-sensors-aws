@@ -35,10 +35,10 @@ class ProjectCodeStack(Stack):
             timeout=Duration.minutes(5),
             memory_size=512,
             log_retention=logs.RetentionDays.ONE_WEEK,
-            environment={
-                "BUCKET_NAME": gltf_bucket.bucket_name,
-            },
         )
+        
+        parser.add_environment("BUCKET_NAME", gltf_bucket.bucket_name)
+        parser.add_environment("AWS_LAMBDA_FUNCTION_ARN", parser.function_arn)
 
         # Grant S3 and SiteWise permissions
         gltf_bucket.grant_read(parser)
@@ -60,12 +60,14 @@ class ProjectCodeStack(Stack):
             ],
             resources=["*"],
         ))
+        
+        source_arn = f"arn:aws:iot:{self.region}:{self.account}:rule/*"
 
         # Grant the Lambda function permission to be invoked by IoT
         parser.add_permission("AllowIoTInvoke",
             principal=iam.ServicePrincipal("iot.amazonaws.com"),
             action="lambda:InvokeFunction",
-            source_arn=f"arn:aws:iot:{self.region}:{self.account}:rule/*"
+            source_arn=source_arn
         )
 
         # Subscribe Lambda to new-objects in the bucket
