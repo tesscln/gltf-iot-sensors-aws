@@ -61,14 +61,7 @@ class ProjectCodeStack(Stack):
             resources=["*"],
         ))
         
-        source_arn = f"arn:aws:iot:{self.region}:{self.account}:rule/*"
-
-        # Grant the Lambda function permission to be invoked by IoT
-        parser.add_permission("AllowIoTInvoke",
-            principal=iam.ServicePrincipal("iot.amazonaws.com"),
-            action="lambda:InvokeFunction",
-            source_arn=source_arn
-        )
+        parser.grant_invoke(iam.ServicePrincipal("iot.amazonaws.com"))
 
         # Subscribe Lambda to new-objects in the bucket
         gltf_bucket.add_event_notification(
