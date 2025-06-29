@@ -38,7 +38,7 @@ class ProjectCodeStack(Stack):
             environment={
                 "BUCKET_NAME": gltf_bucket.bucket_name,
                 # We'll also pass its own ARN so the function can build its IoT rule
-                "AWS_LAMBDA_FUNCTION_ARN": lambda_.Fn.get_att("GltfParserLambda.Arn").to_string(),
+                 "AWS_LAMBDA_FUNCTION_ARN": parser.function_arn
             }
         )
 
