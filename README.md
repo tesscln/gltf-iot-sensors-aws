@@ -62,7 +62,7 @@ This creates:
 Run this in your terminal:
 
 ```bash
-python3 scripts/upload_gltf.py --bucket-output-name GltfBucketName
+python3 scripts/upload_gltf.py --bucket-output-name GltfUploadBucketName
 ```
 
 The upload script supports both glTF formats:
@@ -93,7 +93,7 @@ If the upload is successful, you'll see: **"Upload complete. Lambda function wil
 To remove all created resources (assets, asset models, and uploaded glTF files), run:
 
 ```bash
-python3 cleanup_all.py
+python3 scripts/cleanup_all.py
 ```
 
 This will delete all IoT SiteWise assets, asset models, and glTF files from S3, allowing you to start fresh.

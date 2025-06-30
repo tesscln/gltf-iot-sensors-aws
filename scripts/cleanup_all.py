@@ -6,7 +6,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 CFN_STACK_NAME = "ProjectCodeStack"
-CFN_BUCKET_OUTPUT_KEY = "GltfBucketName"
+CFN_BUCKET_OUTPUT_KEY = "GltfUploadBucketName"
 
 cf        = boto3.client("cloudformation")
 s3        = boto3.resource("s3")
