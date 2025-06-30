@@ -110,6 +110,7 @@ gltf-iot-sensors-aws/
 ├── cdk.json                        # CDK configuration
 ├── scripts/                       
 │   └── upload_gltf.py              # glTF file upload script
+│   └── cleanup_all.py              # Cleanup script to remove all assets and files.
 ├── project_code/                   
 │   ├── __init__.py               
 │   ├── project_code_stack.py       # CDK stack definition
