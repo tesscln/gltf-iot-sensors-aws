@@ -9,6 +9,8 @@ This project automatically converts glTF 3D models into fully functional digital
 
 ![Architecture Diagram](.images/project_architecture.png)
 
+*Please note that for now this CDK does not configure AWS IoT TwinMaker and Grafana.
+
 ## Deployment on your AWS account
 
 ### Prerequisites
@@ -52,7 +54,6 @@ This creates:
 - ✅ S3 bucket for the glTF files uploads
 - ✅ Lambda function triggered for automatic processing
 - ✅ IoT Core MQTT broker and topic rules
-- ✅ TwinMaker workspace
 - ✅ IoT SiteWise setup (asset model and assets)
 - ✅ All necessary IAM roles and permissions
 
@@ -79,7 +80,6 @@ If the upload is successful, you'll see: **"Upload complete. Lambda function wil
 2. **Structure Parsing**: Lambda extracts scene, nodes, mesh names, and sensor locations from your glTF file.
 3. **Asset Creation**: IoT SiteWise assets and hierarchies are created automatically.
 4. **Topic Mapping**: Each asset property is mapped to its corresponding MQTT topic.
-5. **Digital Twin Binding**: TwinMaker connects the 3D model to the IoT asset hierarchy.
 
 ### Step 5: Visualize in Grafana
 
@@ -87,6 +87,8 @@ If the upload is successful, you'll see: **"Upload complete. Lambda function wil
 2. View the live TwinMaker 3D scene
 3. See real-time sensor data streaming
 4. Query historical data from Timestream or S3
+
+*Please note this step has not been deployed yet.
 
 ### Cleanup
 
